@@ -122,22 +122,21 @@ void announceToHomeAssistant()
     Serial.println("MQTT: Annoucing to Home Assistant");
 
     StaticJsonBuffer<2048> jsonObject;
+    JsonObject& device = jsonObject.createObject();
+    device.set("name", "Regal");
+    device.set("identifiers", WiFi.macAddress());
+
     JsonObject& discovery = jsonObject.createObject();
     discovery.set("name", NAME);
     discovery.set("unique_id", WiFi.macAddress());
-    discovery.set("platform", "mqtt_json");
+    discovery.set("platform", "mqtt");
+    discovery.set("schema", "json");
     discovery.set("state_topic", MQTT_TOPIC_STATE);
     discovery.set("availability_topic", MQTT_TOPIC_AVAILABLE);
     discovery.set("command_topic", MQTT_TOPIC_COMMAND);
-    discovery.set("brightness", true);
     discovery.set("rgb", true);
-    discovery.set("effect", true);
-
-    /// Adds effect list
-    JsonArray& effectList = discovery.createNestedArray("effect_list");
-    for(std::map<string,int>::iterator e = effects.begin(); e != effects.end(); ++e) {
-         effectList.add(e->first.c_str());
-    }
+    discovery.set("brightness", true);
+    discovery.set("device", device);
 
     char payload[2048];
     discovery.printTo(payload);
@@ -153,29 +152,28 @@ void announceToHomeAssistant()
 void updateState()
 {
     Serial.println("STATE: Updating...");
-
-    (currentState.on) ? ledstrip.start() : ledstrip.stop();
-    ledstrip.setBrightness(currentState.brightness);
-    ledstrip.setMode(effects[currentState.effect.c_str()]);
-    ledstrip.setSpeed(currentState.speed);
-    ledstrip.setColor(
-        currentState.color.r,
-        currentState.color.g,
-        currentState.color.b
-    );
+    if (currentState.on) {
+        RgbColor color(
+            currentState.color.r * currentState.brightness / 100,
+            currentState.color.g * currentState.brightness / 100,
+            currentState.color.b * currentState.brightness / 100
+        );
+        ledstrip.ClearTo(color);
+    } else {
+        RgbColor color(0,0,0);
+        ledstrip.ClearTo(color);
+    }
+    ledstrip.Show();
 
     StaticJsonBuffer<512> currentJsonStateBuffer;
     JsonObject& currentJsonState = currentJsonStateBuffer.createObject();
-
-    currentJsonState.set("speed", currentState.speed);
-    currentJsonState.set("brightness", currentState.brightness);
-    currentJsonState.set("state", currentState.on ? "ON" : "OFF");
-    currentJsonState.set("effect", currentState.effect.c_str());
 
     JsonObject& currentJsonStateColor = currentJsonState.createNestedObject("color");
     currentJsonStateColor.set("r", currentState.color.r);
     currentJsonStateColor.set("g", currentState.color.g);
     currentJsonStateColor.set("b", currentState.color.b);
+    currentJsonState.set("state", currentState.on ? "ON" : "OFF");
+    currentJsonState.set("brightness", currentState.brightness);
 
     char payload[512];
     currentJsonState.printTo(payload);
@@ -210,7 +208,7 @@ void setup()
     Serial.println("LED Controller");
     Serial.printf("Version %s\n\n", VERSION);
 
-    setupOTA(WIFI_HOSTNAME, OTA_PORT, OTA_PASSWORD);
+    //setupOTA(WIFI_HOSTNAME, OTA_PORT, OTA_PASSWORD);
 
     // Initialize EEPROM
     if (!EEPROM.begin(512)) {
@@ -221,7 +219,7 @@ void setup()
     }
 
     // Setup LED strip
-    ledstrip.init();
+    ledstrip.Begin();
 
     // Read previous state from EEPROM
     Serial.println("EEPROM: Reading previous state...");
@@ -244,7 +242,5 @@ void setup()
 
 void loop()
 {
-    // The program loop does only 1 things...
-    // Keeping the LED strip going
-    ledstrip.service();
+    // The program loop does only 0 things...
 }
